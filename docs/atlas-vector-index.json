@@ -1,0 +1,21 @@
+{
+  "name": "destination-guide-chunks",
+  "type": "vectorSearch",
+  "fields": [
+    {
+      "type": "vector",
+      "path": "guideChunks.embedding",
+      "numDimensions": "${EMBEDDING_DIMENSIONS}",
+      "similarity": "cosine"
+    },
+    {
+      "type": "filter",
+      "path": "country"
+    },
+    {
+      "type": "filter",
+      "path": "tags"
+    }
+  ],
+  "nestedRoot": "guideChunks"
+}
