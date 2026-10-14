@@ -8,9 +8,9 @@ The index JSON is a template because Atlas requires `numDimensions` to be a JSON
 node --env-file=.env.local -e 'const fs = require("node:fs"); const dimensions = process.env.EMBEDDING_DIMENSIONS; if (!/^[1-9]\d*$/.test(dimensions ?? "")) throw new Error("Set EMBEDDING_DIMENSIONS to a positive integer in .env.local"); const template = fs.readFileSync("docs/atlas-vector-index.json", "utf8"); process.stdout.write(template.replace("\"${EMBEDDING_DIMENSIONS}\"", dimensions));'
 ```
 
-The output is the JSON to paste into Atlas. The configured `EMBEDDING_MODEL` must produce vectors with the configured dimension.
+The output is the JSON to paste into Atlas. The configured `EMBEDDING_MODEL` must produce vectors with the configured dimension. Changing the embedding model or dimension requires re-seeding and recreating the Atlas index to match.
 
-Seeding without `OPENAI_API_KEY` stores guide text without embeddings, so vector search will return no guide chunks until embeddings are generated. After adding a key, rerun `npm run seed` to upsert the same destinations with embeddings.
+Seeding without `GOOGLE_GENERATIVE_AI_API_KEY` stores guide text without embeddings, so vector search will return no guide chunks until embeddings are generated. After setting the key, rerun `npm run seed` to upsert the same destinations with embeddings.
 
 ## Create the index in Atlas
 

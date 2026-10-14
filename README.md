@@ -96,7 +96,7 @@ Planned: this repo is still in the early scaffolding stage.
 | Styling | Base CSS and default Next app styles | Tailwind or design system |
 | Database | Not configured | MongoDB Atlas |
 | Search | Not configured | Atlas Vector Search |
-| LLM | Not configured | OpenAI-compatible model or equivalent |
+| LLM | Not configured | Gemini via the Vercel AI SDK |
 | Auth | Not configured | Auth.js |
 | Deployment | Local Next.js app | Vercel |
 
@@ -107,7 +107,7 @@ Planned: this repo is still in the early scaffolding stage.
 - Node.js 20+
 - npm
 - A MongoDB Atlas account for the planned vector-search setup
-- An LLM provider API key
+- A Google AI Studio API key for Gemini
 - A Vercel account for deployment
 
 ### Clone and install
@@ -120,7 +120,7 @@ npm install
 
 ### Environment variables
 
-Copy `.env.example` to `.env.local` and set the MongoDB connection string. Embedding settings are needed only when generating vector embeddings during seeding.
+Copy `.env.example` to `.env.local` and set the MongoDB connection string and Google Generative AI API key. Choose a currently free chat model in Google AI Studio for `GEMINI_CHAT_MODEL`. Embedding settings are needed only when generating vector embeddings during seeding.
 
 ```bash
 cp .env.example .env.local
@@ -129,7 +129,7 @@ cp .env.example .env.local
 Notes:
 
 - `MONGODB_URI` is required to seed the database; `MONGODB_DB` defaults to `tripcraft`.
-- Without `OPENAI_API_KEY`, the seed script stores guide text without embeddings. To generate embeddings, set `OPENAI_API_KEY`, `EMBEDDING_MODEL`, and `EMBEDDING_DIMENSIONS`.
+- Without `GOOGLE_GENERATIVE_AI_API_KEY`, the seed script stores guide text without embeddings. To generate embeddings, set `GOOGLE_GENERATIVE_AI_API_KEY`, `EMBEDDING_MODEL`, and `EMBEDDING_DIMENSIONS`.
 
 ### Seed command
 

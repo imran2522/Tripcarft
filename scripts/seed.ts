@@ -1,6 +1,6 @@
 import { loadEnvConfig } from "@next/env";
 import { ObjectId } from "mongodb";
-import { embedTexts, getEmbeddingConfig } from "@/lib/ai/embed";
+import { embedDocuments, getEmbeddingConfig } from "@/lib/ai/embed";
 import type {
   Destination,
   GuideChunk,
@@ -264,9 +264,9 @@ async function seedDestinations(
   }
 
   const embeddings = shouldEmbed
-    ? await embedTexts(
+    ? await embedDocuments(
         destinations.flatMap((destination) =>
-          destination.chunks.map((chunk) => chunk.text),
+          destination.chunks.map(({ topic, text }) => ({ topic, text })),
         ),
       )
     : undefined;
@@ -500,12 +500,12 @@ async function main(): Promise<void> {
     return;
   }
 
-  const shouldEmbed = Boolean(process.env.OPENAI_API_KEY);
+  const shouldEmbed = Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
   if (shouldEmbed) {
     getEmbeddingConfig();
   } else {
     console.info(
-      "OPENAI_API_KEY is not set; seeding guide chunks without embeddings. Add a key and rerun seed to enable vector search.",
+      "GOOGLE_GENERATIVE_AI_API_KEY is not set; seeding guide chunks without embeddings. Set it and rerun seed to enable vector search.",
     );
   }
 

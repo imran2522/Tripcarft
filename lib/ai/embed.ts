@@ -1,14 +1,14 @@
+import { google } from "@ai-sdk/google";
+import { embed, embedMany } from "ai";
 import "server-only";
 
 export function getEmbeddingConfig(): {
-  apiKey: string;
   model: string;
   dimensions: number;
 } {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
     throw new Error(
-      "OPENAI_API_KEY is missing. Set it before seeding so guide chunks can be embedded.",
+      "GOOGLE_GENERATIVE_AI_API_KEY is missing. Set it before seeding so guide chunks can be embedded.",
     );
   }
 
@@ -24,62 +24,100 @@ export function getEmbeddingConfig(): {
     );
   }
 
-  return { apiKey, model, dimensions };
+  return { model, dimensions };
 }
 
-export async function embedTexts(texts: string[]): Promise<number[][]> {
-  const { apiKey, model, dimensions } = getEmbeddingConfig();
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ input: texts, model, dimensions }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Embedding provider returned HTTP ${response.status}.`);
+function validateEmbeddings(
+  embeddings: unknown,
+  expectedCount: number,
+  dimensions: number,
+): number[][] {
+  if (!Array.isArray(embeddings) || embeddings.length !== expectedCount) {
+    throw new Error(
+      "Embedding provider returned a different number of vectors than requested.",
+    );
   }
 
-  const payload: unknown = await response.json();
-  if (
-    typeof payload !== "object" ||
-    payload === null ||
-    !("data" in payload) ||
-    !Array.isArray(payload.data)
-  ) {
-    throw new Error("Embedding provider returned an invalid response.");
-  }
-
-  const embeddings = new Array<number[]>(texts.length);
-  for (const item of payload.data) {
+  const validatedEmbeddings: number[][] = [];
+  for (const embedding of embeddings) {
     if (
-      typeof item !== "object" ||
-      item === null ||
-      !("index" in item) ||
-      typeof item.index !== "number" ||
-      !Number.isInteger(item.index) ||
-      item.index < 0 ||
-      item.index >= texts.length ||
-      !("embedding" in item) ||
-      !Array.isArray(item.embedding) ||
-      item.embedding.length !== dimensions ||
-      !item.embedding.every(
+      !Array.isArray(embedding) ||
+      embedding.length !== dimensions ||
+      !embedding.every(
         (value: unknown) => typeof value === "number" && Number.isFinite(value),
       )
     ) {
       throw new Error(
-        "Embedding provider returned a missing, invalid, or incorrectly sized embedding.",
+        "Embedding provider returned an invalid or incorrectly sized embedding.",
       );
     }
 
-    embeddings[item.index] = item.embedding;
+    validatedEmbeddings.push(embedding);
   }
 
-  if (embeddings.some((embedding) => !embedding)) {
-    throw new Error("Embedding provider returned fewer vectors than requested.");
-  }
+  return validatedEmbeddings;
+}
 
-  return embeddings;
+async function requestEmbeddings<T>(request: () => Promise<T>): Promise<T> {
+  try {
+    return await request();
+  } catch (error) {
+    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Embedding provider request failed.";
+    throw new Error(apiKey ? message.replaceAll(apiKey, "[redacted]") : message);
+  }
+}
+
+export async function embedDocuments(
+  items: { topic: string; text: string }[],
+): Promise<number[][]> {
+  const { model, dimensions } = getEmbeddingConfig();
+  const values = items.map(({ topic, text }) =>
+    model === "gemini-embedding-2" ? `title: ${topic} | text: ${text}` : text,
+  );
+  const providerOptions = {
+    google: {
+      outputDimensionality: dimensions,
+      ...(model === "gemini-embedding-001"
+        ? { taskType: "RETRIEVAL_DOCUMENT" as const }
+        : {}),
+    },
+  };
+  const { embeddings } = await requestEmbeddings(() =>
+    embedMany({
+      model: google.embedding(model),
+      values,
+      providerOptions,
+    }),
+  );
+
+  return validateEmbeddings(embeddings, items.length, dimensions);
+}
+
+export async function embedQuery(text: string): Promise<number[]> {
+  const { model, dimensions } = getEmbeddingConfig();
+  const value =
+    model === "gemini-embedding-2"
+      ? `task: search result | query: ${text}`
+      : text;
+  const providerOptions = {
+    google: {
+      outputDimensionality: dimensions,
+      ...(model === "gemini-embedding-001"
+        ? { taskType: "RETRIEVAL_QUERY" as const }
+        : {}),
+    },
+  };
+  const { embedding } = await requestEmbeddings(() =>
+    embed({
+      model: google.embedding(model),
+      value,
+      providerOptions,
+    }),
+  );
+
+  return validateEmbeddings([embedding], 1, dimensions)[0];
 }
