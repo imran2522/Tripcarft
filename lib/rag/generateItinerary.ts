@@ -19,6 +19,7 @@ export async function generateItinerary(
   brief: Trip["brief"],
 ): Promise<ItineraryDayItem[]> {
   const chunks = await retrieveGuideChunks(brief);
+  const retrievedChunkIds = new Set(chunks.map(({ id }) => id));
   const formattedBrief = {
     ...brief,
     startDate: brief.startDate.toISOString(),
@@ -45,5 +46,11 @@ export async function generateItinerary(
     ].join("\n"),
   });
 
-  return output;
+  return output.flatMap((item) => {
+    const sourceChunkIds = item.sourceChunkIds.filter((id) =>
+      retrievedChunkIds.has(id),
+    );
+
+    return sourceChunkIds.length > 0 ? [{ ...item, sourceChunkIds }] : [];
+  });
 }
