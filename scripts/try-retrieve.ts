@@ -17,7 +17,6 @@ async function main(): Promise<void> {
         endDate: new Date("2026-10-25T00:00:00.000Z"),
         interests: ["street food", "old mosques"],
         budget: "mid",
-        notes: "street food and old mosques in Istanbul",
       },
       5,
     );

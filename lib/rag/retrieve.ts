@@ -7,6 +7,7 @@ import { embedQuery } from "@/lib/ai/embed";
 const VECTOR_INDEX_NAME = "destination-guide-chunks";
 const DEFAULT_RESULT_LIMIT = 5;
 const MAX_RESULT_LIMIT = 100;
+type RetrievalBrief = Omit<Trip["brief"], "notes">;
 
 interface RetrievalCandidate {
   slug: string;
@@ -27,13 +28,12 @@ export interface RetrievedGuideChunk {
   score: number;
 }
 
-function formatBrief(brief: Trip["brief"]): string {
+function formatBrief(brief: RetrievalBrief): string {
   return [
     `Cities: ${brief.cities.join(", ")}`,
     `Dates: ${brief.startDate.toISOString()} to ${brief.endDate.toISOString()}`,
     `Interests: ${brief.interests.join(", ")}`,
     `Budget: ${brief.budget}`,
-    brief.notes ? `Notes: ${brief.notes}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -64,7 +64,7 @@ function cosineSimilarity(left: number[], right: number[]): number {
 }
 
 export async function retrieveGuideChunks(
-  brief: Trip["brief"],
+  brief: RetrievalBrief,
   limit = DEFAULT_RESULT_LIMIT,
 ): Promise<RetrievedGuideChunk[]> {
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_RESULT_LIMIT) {
