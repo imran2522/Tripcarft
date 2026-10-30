@@ -21,7 +21,7 @@ TripCraft is an AI trip planner for building day-by-day itineraries from a short
 
 ## Current status
 
-This repository is an early TripCraft implementation. It includes a MongoDB data layer and seed data, but the trip-planning UI and end-to-end itinerary generation experience are still planned.
+This repository is an early TripCraft implementation. It includes a MongoDB data layer, seed data, and an API endpoint for generating itineraries; the trip-planning UI and account features are still planned.
 
 ## Features
 
@@ -32,10 +32,10 @@ Implemented today:
 - Base styling and layout from the default app template
 - MongoDB client, collection setup, and indexes
 - Seed script with five destinations and six guide-text chunks per destination; embeddings are optional
+- `POST /api/trips/generate` accepts a JSON `{ "brief": { ... } }` payload and returns generated itinerary items
 
 Planned:
 - Trip brief form for dates, cities, interests, and budget
-- End-to-end AI-generated itinerary from retrieved destination knowledge
 - Follow-up chat editing for itinerary updates
 - Saved trips per user
 - Public share pages for finished itineraries
@@ -47,7 +47,7 @@ Planned:
    
    TripCraft is designed to ground itinerary generation in destination guide content stored in MongoDB Atlas. The content is chunked, embedded, and indexed for vector search. When a user describes a trip, the system retrieves the relevant passages and asks the LLM to build the itinerary from that source material instead of inventing destinations or activities.
 
-   Destination guide content and an optional embedding seed pipeline are implemented. Retrieval and itinerary generation are still planned.
+   Destination guide content, retrieval, and itinerary generation are implemented. Send a `brief` containing `cities`, `startDate`, `endDate`, `interests`, `budget`, and optional `notes` to `POST /api/trips/generate`. The route uses Next.js's default Node.js runtime because Cache Components are enabled.
 
 2. Conversational editing
    
@@ -69,7 +69,7 @@ The project is intended to split responsibilities cleanly:
 - Client Components handle the trip form, itinerary UI, and chat editor
 - Route Handlers handle streaming AI responses and itinerary updates
 
-This repo does not yet contain those server/client boundaries or route handlers; the structure below reflects the product goal rather than current code.
+The generation Route Handler is implemented; the client trip-planning UI, saved-trip flow, and remaining route handlers are still planned.
 
 ```mermaid
 flowchart LR
