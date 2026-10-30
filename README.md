@@ -21,7 +21,7 @@ TripCraft is an AI trip planner for building day-by-day itineraries from a short
 
 ## Current status
 
-This repository is an early TripCraft implementation. It includes a MongoDB data layer, seed data, and an API endpoint for generating itineraries; the trip-planning UI and account features are still planned.
+This repository is an early TripCraft implementation. It includes Google OAuth-protected API routes for generating and editing saved itineraries. The trip-planning UI and account-management experience are still planned.
 
 ## Features
 
@@ -32,14 +32,14 @@ Implemented today:
 - Base styling and layout from the default app template
 - MongoDB client, collection setup, and indexes
 - Seed script with five destinations and six guide-text chunks per destination; embeddings are optional
-- `POST /api/trips/generate` accepts a JSON `{ "brief": { ... } }` payload and returns generated itinerary items
+- Google OAuth sessions with Auth.js
+- `POST /api/trips/generate` creates a saved trip and day-by-day itinerary for the signed-in user
+- `POST /api/trips/[id]/chat` revises one saved day, using fresh guide retrieval and appending the exchange to trip chat history
 
 Planned:
 - Trip brief form for dates, cities, interests, and budget
-- Follow-up chat editing for itinerary updates
-- Saved trips per user
+- User-facing sign-in and saved-trip UI
 - Public share pages for finished itineraries
-- MongoDB Atlas vector search and embeddings pipeline
 
 ## How TripCraft works
 
@@ -47,19 +47,19 @@ Planned:
    
    TripCraft is designed to ground itinerary generation in destination guide content stored in MongoDB Atlas. The content is chunked, embedded, and indexed for vector search. When a user describes a trip, the system retrieves the relevant passages and asks the LLM to build the itinerary from that source material instead of inventing destinations or activities.
 
-   Destination guide content, retrieval, and itinerary generation are implemented. Send a `brief` containing `cities`, `startDate`, `endDate`, `interests`, `budget`, and optional `notes` to `POST /api/trips/generate`. The route uses Next.js's default Node.js runtime because Cache Components are enabled.
+   Destination guide content, retrieval, and itinerary generation are implemented. An authenticated request to `POST /api/trips/generate` accepts a `brief` containing `cities`, `startDate`, `endDate`, `interests`, `budget`, and optional `notes`. It stores the generated trip and day documents under the signed-in user's ID.
 
 2. Conversational editing
    
-   After the initial itinerary is created, the user can ask to change specific days or swap activities. The app is intended to update the saved itinerary rather than regenerate the whole trip from scratch, preserving trip context across follow-up chat messages.
+   `POST /api/trips/[id]/chat` accepts a `dayNumber` and an `instruction`. It loads only that itinerary day, retrieves fresh guide chunks, and asks the model for a schema-validated revision. The day update and the two chat-history entries are saved in one MongoDB transaction, so neither persists if the other fails.
 
-   Planned: this is not implemented in the current repo snapshot.
+   A user-facing chat editor is still planned.
 
 3. Accounts and sharing
    
-   Trips are intended to be saved per authenticated user with Auth.js. A public read-only route such as /share/[slug] is meant to expose a trip snapshot that renders metadata and social preview information for links shared on WhatsApp, LinkedIn, and similar platforms.
+   Auth.js Google OAuth protects trip generation and editing APIs, and generated trips are stored per authenticated user. A user-facing account experience and public read-only share pages are still planned.
 
-   Planned: this is not implemented in the current repo snapshot.
+   Sign in through Auth.js at `/api/auth/signin`.
 
 ## Architecture
 
@@ -67,9 +67,9 @@ The project is intended to split responsibilities cleanly:
 
 - Server Components fetch trip data and render shared/public pages
 - Client Components handle the trip form, itinerary UI, and chat editor
-- Route Handlers handle streaming AI responses and itinerary updates
+- Route Handlers handle authenticated trip generation and day-level itinerary edits
 
-The generation Route Handler is implemented; the client trip-planning UI, saved-trip flow, and remaining route handlers are still planned.
+The generation, chat-edit, and Auth.js handlers are implemented; the client trip-planning UI and share routes are still planned.
 
 ```mermaid
 flowchart LR
@@ -94,10 +94,10 @@ Planned: this repo is still in the early scaffolding stage.
 | UI | React 19 | React 19 |
 | Language | TypeScript | TypeScript |
 | Styling | Base CSS and default Next app styles | Tailwind or design system |
-| Database | Not configured | MongoDB Atlas |
-| Search | Not configured | Atlas Vector Search |
-| LLM | Not configured | Gemini via the Vercel AI SDK |
-| Auth | Not configured | Auth.js |
+| Database | MongoDB client and collections | MongoDB Atlas |
+| Search | Vector retrieval implemented | Atlas Vector Search |
+| LLM | Gemini through the Vercel AI SDK | Gemini |
+| Auth | Google OAuth for API routes | Auth.js |
 | Deployment | Local Next.js app | Vercel |
 
 ## Getting started
@@ -106,8 +106,9 @@ Planned: this repo is still in the early scaffolding stage.
 
 - Node.js 20+
 - npm
-- A MongoDB Atlas account for the planned vector-search setup
+- A MongoDB Atlas replica-set deployment (transactions are used when saving trips and chat edits)
 - A Google AI Studio API key for Gemini
+- A Google OAuth client for Auth.js
 - A Vercel account for deployment
 
 ### Clone and install
@@ -120,7 +121,7 @@ npm install
 
 ### Environment variables
 
-Copy `.env.example` to `.env.local` and set the MongoDB connection string and Google Generative AI API key. Choose a currently free chat model in Google AI Studio for `GEMINI_CHAT_MODEL`. Embedding settings are needed only when generating vector embeddings during seeding.
+Copy `.env.example` to `.env.local` and set the MongoDB, Google AI, and Auth.js values. Choose a currently available chat model in Google AI Studio for `GEMINI_CHAT_MODEL`.
 
 ```bash
 cp .env.example .env.local
@@ -130,6 +131,39 @@ Notes:
 
 - `MONGODB_URI` is required to seed the database; `MONGODB_DB` defaults to `tripcraft`.
 - Without `GOOGLE_GENERATIVE_AI_API_KEY`, the seed script stores guide text without embeddings. To generate embeddings, set `GOOGLE_GENERATIVE_AI_API_KEY`, `EMBEDDING_MODEL`, and `EMBEDDING_DIMENSIONS`.
+- `AUTH_SECRET` should be a unique random secret; generate one with `openssl rand -base64 32`.
+- Set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` from a Google OAuth client. Register `http://localhost:3000/api/auth/callback/google` as a development redirect URI and the corresponding production URL when deploying. These OAuth credentials are separate from the Google AI API key.
+- The API routes require an active Google sign-in session. Auth.js provides a default sign-in page at `/api/auth/signin`; there is not yet a sign-in UI in the app.
+
+### API endpoints
+
+Sign in at `/api/auth/signin`, then send requests with the resulting session cookies.
+
+Generate and persist a trip; start/end dates are inclusive, and `cities` must match seeded destination slugs or names:
+
+```json
+{
+  "brief": {
+    "cities": ["Istanbul"],
+    "startDate": "2027-05-10",
+    "endDate": "2027-05-12",
+    "interests": ["food", "history"],
+    "budget": "mid",
+    "notes": "Keep the pace relaxed."
+  }
+}
+```
+
+`POST /api/trips/generate` responds with `tripId` and generated `days`. Use that ID to revise a single day:
+
+```json
+{
+  "dayNumber": 2,
+  "instruction": "Swap the afternoon activity for a slower neighborhood walk."
+}
+```
+
+Send this body to `POST /api/trips/{tripId}/chat`. The route verifies ownership and returns the revised day. Both routes set a 60-second execution limit for retrieval and model generation.
 
 ### Seed command
 
@@ -182,7 +216,7 @@ Then open http://localhost:3000.
 
 ### Vercel
 
-Deploy the app to Vercel using the standard Next.js setup. Add the environment variables from the section above in the project settings and keep them separate for development and production.
+Deploy the app to Vercel using the standard Next.js setup. Add the environment variables from the section above in the project settings and keep them separate for development and production. Add the production Auth.js callback URL, `https://<your-domain>/api/auth/callback/google`, to the Google OAuth client.
 
 ### Atlas network access
 
@@ -201,7 +235,7 @@ For MongoDB Atlas, allow access from Vercel and local development IPs. A common 
 ## Limitations and scope
 
 - This repository is currently a starter app, not a production-ready trip planner.
-- Destination data is not yet seeded or curated.
+- It only supports destinations included in the seed data.
 - There is no booking flow, live price data, or real-time availability integration.
 - No live travel APIs are connected yet.
 - Planned later: only a curated set of destinations, with no claim of real-time travel correctness.
@@ -212,11 +246,9 @@ For MongoDB Atlas, allow access from Vercel and local development IPs. A common 
 
 Planned next steps:
 
-- Add destination seed data and embedding pipeline
-- Build trip form and itinerary generation flow
-- Add saved trip history and Auth.js integration
+- Build the client-side trip form and itinerary experience
+- Add user-facing saved trip history and sign-in UI
 - Implement share pages with metadata previews
-- Add chat-based itinerary editing with streaming responses
 - Add a real flight-data or hotel-data provider later, if needed
 - Expand destination coverage and trip styles
 
@@ -234,8 +266,6 @@ The following items are intentionally left as placeholders for the real project:
 - Itinerary view screenshot: <ADD_SCREENSHOT_URL>
 - Chat editing screenshot: <ADD_SCREENSHOT_URL>
 - Share page screenshot: <ADD_SCREENSHOT_URL>
-- .env.example file: not present yet
-- Seed command: planned, not implemented
 - Real Atlas vector index configuration: pending project implementation
 - Production deployment URL: to be added once deployed
 - License choice: pending

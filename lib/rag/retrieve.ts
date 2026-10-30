@@ -28,12 +28,13 @@ export interface RetrievedGuideChunk {
   score: number;
 }
 
-function formatBrief(brief: RetrievalBrief): string {
+function formatBrief(brief: RetrievalBrief, queryContext?: string): string {
   return [
     `Cities: ${brief.cities.join(", ")}`,
     `Dates: ${brief.startDate.toISOString()} to ${brief.endDate.toISOString()}`,
     `Interests: ${brief.interests.join(", ")}`,
     `Budget: ${brief.budget}`,
+    queryContext ? `Additional trip-planning context: ${queryContext}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -66,6 +67,7 @@ function cosineSimilarity(left: number[], right: number[]): number {
 export async function retrieveGuideChunks(
   brief: RetrievalBrief,
   limit = DEFAULT_RESULT_LIMIT,
+  queryContext?: string,
 ): Promise<RetrievedGuideChunk[]> {
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_RESULT_LIMIT) {
     throw new Error(
@@ -73,7 +75,7 @@ export async function retrieveGuideChunks(
     );
   }
 
-  const queryVector = await embedQuery(formatBrief(brief));
+  const queryVector = await embedQuery(formatBrief(brief, queryContext));
   const candidateLimit = limit * 20;
   const candidates = await (
     await getDestinations()

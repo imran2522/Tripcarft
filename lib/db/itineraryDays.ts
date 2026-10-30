@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { ObjectId, type ClientSession } from "mongodb";
 import "server-only";
 
 import type { ItineraryDayItem } from "@/lib/db/types";
@@ -17,6 +17,7 @@ export async function saveItineraryDays(
   tripId: ObjectId,
   ownerId: string,
   days: ItineraryDayInput[],
+  session?: ClientSession,
 ): Promise<void> {
   const dayNumbers = new Set<number>();
   for (const { dayNumber } of days) {
@@ -58,5 +59,6 @@ export async function saveItineraryDays(
         upsert: true,
       },
     })),
+    session ? { session } : undefined,
   );
 }
