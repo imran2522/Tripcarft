@@ -1,12 +1,28 @@
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  type UIMessage,
+} from "ai";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 
 import { auth } from "@/auth";
-import type { Trip } from "@/lib/db/types";
+import type { ItineraryDay, Trip } from "@/lib/db/types";
 import { clientPromise, getItineraryDays, getTrips } from "@/lib/mongodb";
 import { reviseItineraryDay } from "@/lib/rag/reviseItineraryDay";
 
 export const maxDuration = 60;
+
+type DayUpdateData = Omit<
+  Pick<ItineraryDay, "dayNumber" | "date" | "title" | "items" | "notes">,
+  "date"
+> & {
+  _id: string;
+  date: string;
+  updatedAt: string;
+};
+
+type ChatMessage = UIMessage<unknown, { "day-update": DayUpdateData }>;
 
 const requestSchema = z.strictObject({
   dayNumber: z.number().int().positive(),
@@ -68,96 +84,139 @@ export async function POST(
     return Response.json({ error: "Itinerary day not found." }, { status: 404 });
   }
 
-  try {
-    const revision = await reviseItineraryDay(
-      trip.brief,
-      day,
-      parsedRequest.data.instruction,
-    );
-    const now = new Date();
-    const assistantMessage = `Updated day ${day.dayNumber}: ${revision.title}`;
-    const chatEntries: Trip["chatHistory"] = [
-      {
-        role: "user",
-        content: parsedRequest.data.instruction,
-        createdAt: now,
-      },
-      {
-        role: "assistant",
-        content: assistantMessage,
-        createdAt: now,
-      },
-    ];
-    const client = await clientPromise;
-    const dbSession = client.startSession();
-
-    try {
-      await dbSession.withTransaction(async () => {
-        const dayUpdate = await itineraryDays.updateOne(
-          { _id: day._id, updatedAt: day.updatedAt },
-          {
-            $set: {
-              title: revision.title,
-              items: revision.items,
-              notes: revision.notes,
-              updatedAt: now,
-            },
-          },
-          { session: dbSession },
-        );
-        if (dayUpdate.matchedCount !== 1) {
-          throw new ConcurrentDayEditError(
-            "The itinerary day changed while the edit was being generated.",
-          );
-        }
-
-        const tripUpdate = await trips.updateOne(
-          { _id: tripId, ownerId: sessionUser.id },
-          [
-            {
-              $set: {
-                chatHistory: {
-                  $concatArrays: [
-                    { $ifNull: ["$chatHistory", []] },
-                    { $literal: chatEntries },
-                  ],
-                },
-                updatedAt: { $literal: now },
-              },
-            },
-          ],
-          { session: dbSession },
-        );
-        if (tripUpdate.matchedCount !== 1) {
-          throw new Error("Trip disappeared while saving the chat edit.");
-        }
+  const stream = createUIMessageStream<ChatMessage>({
+    async execute({ writer }) {
+      writer.write({ type: "start" });
+      writer.write({
+        type: "text-start",
+        id: "edit-status",
       });
-    } finally {
-      await dbSession.endSession();
-    }
+      writer.write({
+        type: "text-delta",
+        id: "edit-status",
+        delta: `Updating day ${day.dayNumber}...`,
+      });
+      writer.write({
+        type: "text-end",
+        id: "edit-status",
+      });
 
-    return Response.json({
-      day: {
-        ...day,
-        title: revision.title,
-        items: revision.items,
-        notes: revision.notes,
-        updatedAt: now,
-      },
-      message: assistantMessage,
-    });
-  } catch (error) {
-    if (error instanceof ConcurrentDayEditError) {
-      return Response.json(
-        { error: "This day changed during the edit. Reload it and try again." },
-        { status: 409 },
-      );
-    }
+      try {
+        const revision = await reviseItineraryDay(
+          trip.brief,
+          day,
+          parsedRequest.data.instruction,
+        );
+        const now = new Date();
+        const assistantMessage = `Updated day ${day.dayNumber}: ${revision.title}`;
+        const chatEntries: Trip["chatHistory"] = [
+          {
+            role: "user",
+            content: parsedRequest.data.instruction,
+            createdAt: now,
+          },
+          {
+            role: "assistant",
+            content: assistantMessage,
+            createdAt: now,
+          },
+        ];
+        const client = await clientPromise;
+        const dbSession = client.startSession();
 
-    console.error("Trip chat edit failed:", error);
-    return Response.json(
-      { error: "Unable to update the itinerary day." },
-      { status: 500 },
-    );
-  }
+        try {
+          await dbSession.withTransaction(async () => {
+            const dayUpdate = await itineraryDays.updateOne(
+              { _id: day._id, updatedAt: day.updatedAt },
+              {
+                $set: {
+                  title: revision.title,
+                  items: revision.items,
+                  notes: revision.notes,
+                  updatedAt: now,
+                },
+              },
+              { session: dbSession },
+            );
+            if (dayUpdate.matchedCount !== 1) {
+              throw new ConcurrentDayEditError(
+                "The itinerary day changed while the edit was being generated.",
+              );
+            }
+
+            const tripUpdate = await trips.updateOne(
+              { _id: tripId, ownerId: sessionUser.id },
+              [
+                {
+                  $set: {
+                    chatHistory: {
+                      $concatArrays: [
+                        { $ifNull: ["$chatHistory", []] },
+                        { $literal: chatEntries },
+                      ],
+                    },
+                    updatedAt: { $literal: now },
+                  },
+                },
+              ],
+              { session: dbSession },
+            );
+            if (tripUpdate.matchedCount !== 1) {
+              throw new Error("Trip disappeared while saving the chat edit.");
+            }
+          });
+        } finally {
+          await dbSession.endSession();
+        }
+
+        writer.write({
+          type: "text-start",
+          id: "edit-reply",
+        });
+        writer.write({
+          type: "text-delta",
+          id: "edit-reply",
+          delta: assistantMessage,
+        });
+        writer.write({
+          type: "text-end",
+          id: "edit-reply",
+        });
+        writer.write({
+          type: "data-day-update",
+          data: {
+            _id: day._id.toHexString(),
+            dayNumber: day.dayNumber,
+            date: day.date.toISOString(),
+            title: revision.title,
+            items: revision.items,
+            notes: revision.notes,
+            updatedAt: now.toISOString(),
+          },
+        });
+        writer.setOutcome({ status: "completed" });
+      } catch (error) {
+        if (error instanceof ConcurrentDayEditError) {
+          writer.write({
+            type: "error",
+            errorText: "This day changed during the edit. Reload it and try again.",
+          });
+          writer.setOutcome({ status: "failed", error });
+          return;
+        }
+
+        console.error("Trip chat edit failed:", error);
+        writer.write({
+          type: "error",
+          errorText: "Unable to update the itinerary day.",
+        });
+        writer.setOutcome({ status: "failed", error });
+      }
+    },
+  });
+
+  return createUIMessageStreamResponse({
+    stream,
+    keepAliveMs: 15_000,
+  });
 }

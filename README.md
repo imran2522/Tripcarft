@@ -51,7 +51,7 @@ Planned:
 
 2. Conversational editing
    
-   `POST /api/trips/[id]/chat` accepts a `dayNumber` and an `instruction`. It loads only that itinerary day, retrieves fresh guide chunks, and asks the model for a schema-validated revision. The day update and the two chat-history entries are saved in one MongoDB transaction, so neither persists if the other fails.
+   `POST /api/trips/[id]/chat` accepts a `dayNumber` and an `instruction`. It loads only that itinerary day, retrieves fresh guide chunks, and asks the model for a schema-validated revision. The endpoint streams an initial progress message, then emits the assistant reply and a `data-day-update` payload only after the day update and both chat-history entries are saved in one MongoDB transaction. If generation, validation, or saving fails, the stream emits an error and does not report a successful edit.
 
    A user-facing chat editor is still planned.
 
@@ -163,7 +163,7 @@ Generate and persist a trip; start/end dates are inclusive, and `cities` must ma
 }
 ```
 
-Send this body to `POST /api/trips/{tripId}/chat`. The route verifies ownership and returns the revised day. Both routes set a 60-second execution limit for retrieval and model generation.
+Send this body to `POST /api/trips/{tripId}/chat`. The route verifies ownership and returns an AI SDK UI message stream (`text/event-stream`). It streams progress as assistant text; after the validated revision has been saved, it streams the assistant reply and a `data-day-update` part containing the updated day's number, date, title, items, notes, and update time. Consumers can use the data part to update the displayed itinerary. Authentication, request-validation, and not-found failures happen before streaming and retain their JSON error responses; failures after streaming starts are sent as UI-message error parts. Both routes set a 60-second execution limit for retrieval and model generation.
 
 ### Seed command
 
