@@ -40,7 +40,7 @@ export async function saveItineraryDays(
   await collection.bulkWrite(
     days.map((day) => ({
       updateOne: {
-        filter: { tripId, dayNumber: day.dayNumber },
+        filter: { tripId, ownerId, dayNumber: day.dayNumber },
         update: {
           $set: {
             tripId,

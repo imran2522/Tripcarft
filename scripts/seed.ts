@@ -327,7 +327,7 @@ async function seedExampleTrip(
   const trip = db.collection<Trip>("trips");
 
   await trip.updateOne(
-    { "share.slug": "example-istanbul-3-days" },
+    { ownerId, "share.slug": "example-istanbul-3-days" },
     {
       $set: {
         ownerId,
@@ -352,6 +352,7 @@ async function seedExampleTrip(
   );
 
   const savedTrip = await trip.findOne({
+    ownerId,
     "share.slug": "example-istanbul-3-days",
   });
   if (!savedTrip) {
@@ -471,7 +472,7 @@ async function seedExampleTrip(
   const collection = db.collection<ItineraryDay>("itineraryDays");
   for (const day of days) {
     await collection.updateOne(
-      { tripId: savedTrip._id, dayNumber: day.dayNumber },
+      { tripId: savedTrip._id, ownerId, dayNumber: day.dayNumber },
       {
         $set: {
           tripId: savedTrip._id,

@@ -127,7 +127,12 @@ export async function POST(
         try {
           await dbSession.withTransaction(async () => {
             const dayUpdate = await itineraryDays.updateOne(
-              { _id: day._id, updatedAt: day.updatedAt },
+              {
+                _id: day._id,
+                tripId,
+                ownerId: sessionUser.id,
+                updatedAt: day.updatedAt,
+              },
               {
                 $set: {
                   title: revision.title,
