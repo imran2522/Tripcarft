@@ -7,7 +7,12 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 
 import { auth } from "@/auth";
+import { AI_QUOTA_BUSY_MESSAGE, isRateLimitError } from "@/lib/ai/errors";
 import type { ItineraryDay, Trip } from "@/lib/db/types";
+import {
+  countChatMessagesToday,
+  DAILY_CHAT_MESSAGE_LIMIT,
+} from "@/lib/db/usage";
 import { clientPromise, getItineraryDays, getTrips } from "@/lib/mongodb";
 import { reviseItineraryDay } from "@/lib/rag/reviseItineraryDay";
 
@@ -72,6 +77,14 @@ export async function POST(
   const trip = await trips.findOne({ _id: tripId, ownerId: sessionUser.id });
   if (!trip) {
     return Response.json({ error: "Trip not found." }, { status: 404 });
+  }
+
+  const chatMessagesToday = await countChatMessagesToday(sessionUser.id);
+  if (chatMessagesToday >= DAILY_CHAT_MESSAGE_LIMIT) {
+    return Response.json(
+      { error: "Daily chat limit reached. Try again tomorrow." },
+      { status: 429 },
+    );
   }
 
   const itineraryDays = await getItineraryDays();
@@ -213,7 +226,9 @@ export async function POST(
         console.error("Trip chat edit failed:", error);
         writer.write({
           type: "error",
-          errorText: "Unable to update the itinerary day.",
+          errorText: isRateLimitError(error)
+            ? AI_QUOTA_BUSY_MESSAGE
+            : "Unable to update the itinerary day.",
         });
         writer.setOutcome({ status: "failed", error });
       }

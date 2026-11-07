@@ -211,6 +211,12 @@ const indexDefinitions = [
   },
   {
     collection: "trips",
+    name: "ownerId_createdAt",
+    key: { ownerId: 1, createdAt: -1 },
+    options: {},
+  },
+  {
+    collection: "trips",
     name: "share_slug_unique_sparse",
     key: { "share.slug": 1 },
     options: { unique: true, sparse: true },

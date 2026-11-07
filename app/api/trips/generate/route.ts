@@ -2,9 +2,19 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 
 import { auth } from "@/auth";
+import { AI_QUOTA_BUSY_MESSAGE, isRateLimitError } from "@/lib/ai/errors";
 import { saveItineraryDays } from "@/lib/db/itineraryDays";
+import {
+  countTripsCreatedToday,
+  DAILY_TRIP_LIMIT,
+} from "@/lib/db/usage";
 import type { Trip } from "@/lib/db/types";
-import { clientPromise, getDestinations, getTrips } from "@/lib/mongodb";
+import {
+  clientPromise,
+  getDestinations,
+  getItineraryDays,
+  getTrips,
+} from "@/lib/mongodb";
 import { generateItinerary } from "@/lib/rag/generateItinerary";
 
 // Retrieval and model generation both run inside this request.
@@ -90,6 +100,81 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const brief = parsedRequest.data.brief;
+    const trips = await getTrips();
+    const existingTrip = await trips.findOne({
+      ownerId: sessionUser.id,
+      "brief.cities": brief.cities,
+      "brief.startDate": brief.startDate,
+      "brief.endDate": brief.endDate,
+      "brief.interests": brief.interests,
+      "brief.budget": brief.budget,
+      "brief.notes":
+        brief.notes === undefined ? { $exists: false } : brief.notes,
+    });
+
+    if (existingTrip) {
+      const savedDays = await (
+        await getItineraryDays()
+      )
+        .find({ tripId: existingTrip._id, ownerId: sessionUser.id })
+        .sort({ dayNumber: 1 })
+        .toArray();
+      const destinationIds = [
+        ...new Map(
+          savedDays.map((day) => [
+            day.destinationId.toHexString(),
+            day.destinationId,
+          ]),
+        ).values(),
+      ];
+      if (savedDays.length === 0) {
+        throw new Error(
+          "The saved itinerary is incomplete and cannot be reused.",
+        );
+      }
+
+      const destinations = await (
+        await getDestinations()
+      )
+        .find({ _id: { $in: destinationIds } })
+        .project({ _id: 1, name: 1 })
+        .toArray();
+      const destinationNames = new Map(
+        destinations.map(({ _id, name }) => [_id.toHexString(), name]),
+      );
+      const days = savedDays.map((day) => {
+        const city = destinationNames.get(day.destinationId.toHexString());
+        if (!city) {
+          throw new Error(
+            "The saved itinerary references an unavailable destination.",
+          );
+        }
+
+        return {
+          dayNumber: day.dayNumber,
+          city,
+          title: day.title,
+          items: day.items,
+        };
+      });
+
+      return Response.json(
+        {
+          tripId: existingTrip._id.toHexString(),
+          days,
+        },
+        { status: 200 },
+      );
+    }
+
+    const tripsCreatedToday = await countTripsCreatedToday(sessionUser.id);
+    if (tripsCreatedToday >= DAILY_TRIP_LIMIT) {
+      return Response.json(
+        { error: "Daily trip limit reached. Try again tomorrow." },
+        { status: 429 },
+      );
+    }
+
     const citySlugs = [...new Set(brief.cities.map(citySlug))];
     const destinations = await (
       await getDestinations()
@@ -178,6 +263,10 @@ export async function POST(request: Request): Promise<Response> {
     );
   } catch (error) {
     console.error("Trip itinerary generation and save failed:", error);
+    if (isRateLimitError(error)) {
+      return Response.json({ error: AI_QUOTA_BUSY_MESSAGE }, { status: 429 });
+    }
+
     return Response.json(
       { error: "Unable to generate and save the itinerary." },
       { status: 500 },

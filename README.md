@@ -33,8 +33,10 @@ Implemented today:
 - MongoDB client, collection setup, and indexes
 - Seed script with five destinations and six guide-text chunks per destination; embeddings are optional
 - Google OAuth sessions with Auth.js
-- `POST /api/trips/generate` creates a saved trip and day-by-day itinerary for the signed-in user
+- `POST /api/trips/generate` creates a saved trip and day-by-day itinerary for the signed-in user; an unchanged brief reuses its saved itinerary
 - `POST /api/trips/[id]/chat` revises one saved day, using fresh guide retrieval and appending the exchange to trip chat history
+- Daily usage limits use existing trip and chat-history records: three new trips and 20 user chat edits per UTC day
+- Gemini is the default text-generation provider; Groq is an optional text-only alternative
 
 Planned:
 - Trip brief form for dates, cities, interests, and budget
@@ -121,7 +123,7 @@ npm install
 
 ### Environment variables
 
-Copy `.env.example` to `.env.local` and set the MongoDB, Google AI, and Auth.js values. Choose a currently available chat model in Google AI Studio for `GEMINI_CHAT_MODEL`.
+Copy `.env.example` to `.env.local` and set the MongoDB, AI provider, and Auth.js values. Choose a currently available chat model in Google AI Studio for `GEMINI_CHAT_MODEL`.
 
 ```bash
 cp .env.example .env.local
@@ -130,6 +132,7 @@ cp .env.example .env.local
 Notes:
 
 - `MONGODB_URI` is required to seed the database; `MONGODB_DB` defaults to `tripcraft`.
+- `AI_CHAT_PROVIDER` defaults to `google`. For Gemini, set `GOOGLE_GENERATIVE_AI_API_KEY` and `GEMINI_CHAT_MODEL`. To use Groq for chat and itinerary generation instead, set `AI_CHAT_PROVIDER=groq`, `GROQ_API_KEY`, and `GROQ_CHAT_MODEL`. Embeddings and vector retrieval still require Google; Groq does not provide embeddings.
 - Without `GOOGLE_GENERATIVE_AI_API_KEY`, the seed script stores guide text without embeddings. To generate embeddings, set `GOOGLE_GENERATIVE_AI_API_KEY`, `EMBEDDING_MODEL`, and `EMBEDDING_DIMENSIONS`.
 - `AUTH_SECRET` should be a unique random secret; generate one with `openssl rand -base64 32`.
 - Set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` from a Google OAuth client. Register `http://localhost:3000/api/auth/callback/google` as a development redirect URI and the corresponding production URL when deploying. These OAuth credentials are separate from the Google AI API key.
@@ -154,7 +157,7 @@ Generate and persist a trip; start/end dates are inclusive, and `cities` must ma
 }
 ```
 
-`POST /api/trips/generate` responds with `tripId` and generated `days`. Use that ID to revise a single day:
+`POST /api/trips/generate` responds with `tripId` and generated `days`; submitting the same brief again returns its existing trip and days without an AI call. New generations are limited to three per user per UTC day. Daily limits return HTTP 429 with a friendly error message.
 
 ```json
 {
@@ -163,7 +166,7 @@ Generate and persist a trip; start/end dates are inclusive, and `cities` must ma
 }
 ```
 
-Send this body to `POST /api/trips/{tripId}/chat`. The route verifies ownership and returns an AI SDK UI message stream (`text/event-stream`). It streams progress as assistant text; after the validated revision has been saved, it streams the assistant reply and a `data-day-update` part containing the updated day's number, date, title, items, notes, and update time. Consumers can use the data part to update the displayed itinerary. Authentication, request-validation, and not-found failures happen before streaming and retain their JSON error responses; failures after streaming starts are sent as UI-message error parts. Both routes set a 60-second execution limit for retrieval and model generation.
+Send this body to `POST /api/trips/{tripId}/chat`. The route verifies ownership and returns an AI SDK UI message stream (`text/event-stream`). It streams progress as assistant text; after the validated revision has been saved, it streams the assistant reply and a `data-day-update` part containing the updated day's number, date, title, items, notes, and update time. Consumers can use the data part to update the displayed itinerary. Users are limited to 20 chat edits per UTC day. Authentication, request-validation, not-found, and daily-limit failures happen before streaming and retain their JSON responses; failures after streaming starts are sent as UI-message error parts. AI provider rate limits return the friendly message `The free AI quota is busy — try again in a minute` instead of provider details. Both routes set a 60-second execution limit for retrieval and model generation.
 
 ### Seed command
 
