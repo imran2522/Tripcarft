@@ -21,7 +21,7 @@ TripCraft is an AI trip planner for building day-by-day itineraries from a short
 
 ## Current status
 
-This repository is an early TripCraft implementation. It includes Google OAuth-protected API routes for generating and editing saved itineraries. The trip-planning UI and account-management experience are still planned.
+This repository is an early TripCraft implementation. It includes Google OAuth-protected pages and API routes for generating and editing saved itineraries. The trip-planning UI and account-management experience are still planned.
 
 ## Features
 
@@ -59,9 +59,9 @@ Planned:
 
 3. Accounts and sharing
    
-   Auth.js Google OAuth protects trip generation and editing APIs, and generated trips are stored per authenticated user. A user-facing account experience and public read-only share pages are still planned.
+   Auth.js Google OAuth protects rendered pages and trip generation and editing APIs. Generated trips are stored per authenticated user. A user-facing account experience and public read-only share pages are still planned.
 
-   Sign in through Auth.js at `/api/auth/signin`.
+   Sign in through Auth.js at `/api/auth/signin`. The root layout redirects unauthenticated page requests to the Auth.js sign-in page; the trip API handlers independently return `401` when no session is present. Auth.js sign-in and callback handlers remain publicly reachable.
 
 ## Architecture
 
@@ -99,7 +99,7 @@ Planned: this repo is still in the early scaffolding stage.
 | Database | MongoDB client and collections | MongoDB Atlas |
 | Search | Vector retrieval implemented | Atlas Vector Search |
 | LLM | Gemini through the Vercel AI SDK | Gemini |
-| Auth | Google OAuth for API routes | Auth.js |
+| Auth | Google OAuth for pages and API routes | Auth.js |
 | Deployment | Local Next.js app | Vercel |
 
 ## Getting started
@@ -135,8 +135,8 @@ Notes:
 - `AI_CHAT_PROVIDER` defaults to `google`. For Gemini, set `GOOGLE_GENERATIVE_AI_API_KEY` and `GEMINI_CHAT_MODEL`. To use Groq for chat and itinerary generation instead, set `AI_CHAT_PROVIDER=groq`, `GROQ_API_KEY`, and `GROQ_CHAT_MODEL`. Embeddings and vector retrieval still require Google; Groq does not provide embeddings.
 - Without `GOOGLE_GENERATIVE_AI_API_KEY`, the seed script stores guide text without embeddings. To generate embeddings, set `GOOGLE_GENERATIVE_AI_API_KEY`, `EMBEDDING_MODEL`, and `EMBEDDING_DIMENSIONS`.
 - `AUTH_SECRET` should be a unique random secret; generate one with `openssl rand -base64 32`.
-- Set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` from a Google OAuth client. Register `http://localhost:3000/api/auth/callback/google` as a development redirect URI and the corresponding production URL when deploying. These OAuth credentials are separate from the Google AI API key.
-- The API routes require an active Google sign-in session. Auth.js provides a default sign-in page at `/api/auth/signin`; there is not yet a sign-in UI in the app.
+- Set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` from a Google OAuth client. Register `http://localhost:3000/api/auth/callback/google` as the development redirect URI and the corresponding production URL when deploying. These OAuth credentials are separate from the Google AI API key.
+- Protected pages redirect unauthenticated users to Auth.js's default sign-in page at `/api/auth/signin`; the trip API routes return `401` without an active Google sign-in session.
 
 ### API endpoints
 
