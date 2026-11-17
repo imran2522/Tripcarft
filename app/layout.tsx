@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { redirect } from "next/navigation";
-import { Suspense, type ReactNode } from "react";
-import { auth } from "@/auth";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -23,15 +20,6 @@ export const metadata: Metadata = {
   description: "AI-powered trip planning for discovering and refining itineraries.",
 };
 
-async function AuthenticatedContent({ children }: { children: ReactNode }) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    redirect("/api/auth/signin");
-  }
-
-  return children;
-}
-
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
@@ -39,9 +27,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <Suspense fallback={null}>
-          <AuthenticatedContent>{children}</AuthenticatedContent>
-        </Suspense>
+        {children}
       </body>
     </html>
   );

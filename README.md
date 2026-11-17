@@ -21,7 +21,7 @@ TripCraft is an AI trip planner for building day-by-day itineraries from a short
 
 ## Current status
 
-This repository is an early TripCraft implementation. It includes Google OAuth-protected pages and API routes for generating and editing saved itineraries. The trip-planning UI and account-management experience are still planned.
+This repository includes a public TripCraft landing page and trip-brief form, along with Google OAuth-protected API routes for generating and editing saved itineraries. A complete saved-trip management experience is still planned.
 
 ## Features
 
@@ -29,7 +29,8 @@ Implemented today:
 
 - Next.js App Router project scaffold
 - TypeScript setup
-- Base styling and layout from the default app template
+- Public landing page and interactive trip brief form
+- Base styling and shared layout
 - MongoDB client, collection setup, and indexes
 - Seed script with five destinations and six guide-text chunks per destination; embeddings are optional
 - Google OAuth sessions with Auth.js
@@ -39,8 +40,7 @@ Implemented today:
 - Gemini is the default text-generation provider; Groq is an optional text-only alternative
 
 Planned:
-- Trip brief form for dates, cities, interests, and budget
-- User-facing sign-in and saved-trip UI
+- User-facing saved-trip UI
 - Public share pages for finished itineraries
 
 ## How TripCraft works
@@ -61,7 +61,7 @@ Planned:
    
    Auth.js Google OAuth protects rendered pages and trip generation and editing APIs. Generated trips are stored per authenticated user. A user-facing account experience and public read-only share pages are still planned.
 
-   Sign in through Auth.js at `/api/auth/signin`. The root layout redirects unauthenticated page requests to the Auth.js sign-in page; the trip API handlers independently return `401` when no session is present. Auth.js sign-in and callback handlers remain publicly reachable.
+   The landing page is public, and the trip-generation and editing API handlers independently return `401` when no session is present. Sign in through Auth.js at `/api/auth/signin`; Auth.js sign-in and callback handlers remain publicly reachable.
 
 ## Architecture
 
@@ -71,7 +71,7 @@ The project is intended to split responsibilities cleanly:
 - Client Components handle the trip form, itinerary UI, and chat editor
 - Route Handlers handle authenticated trip generation and day-level itinerary edits
 
-The generation, chat-edit, and Auth.js handlers are implemented; the client trip-planning UI and share routes are still planned.
+The public trip brief, generation, chat-edit, and Auth.js handlers are implemented; saved-trip management and share routes are still planned.
 
 ```mermaid
 flowchart LR
@@ -136,7 +136,7 @@ Notes:
 - Without `GOOGLE_GENERATIVE_AI_API_KEY`, the seed script stores guide text without embeddings. To generate embeddings, set `GOOGLE_GENERATIVE_AI_API_KEY`, `EMBEDDING_MODEL`, and `EMBEDDING_DIMENSIONS`.
 - `AUTH_SECRET` should be a unique random secret; generate one with `openssl rand -base64 32`.
 - Set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` from a Google OAuth client. Register `http://localhost:3000/api/auth/callback/google` as the development redirect URI and the corresponding production URL when deploying. These OAuth credentials are separate from the Google AI API key.
-- Protected pages redirect unauthenticated users to Auth.js's default sign-in page at `/api/auth/signin`; the trip API routes return `401` without an active Google sign-in session.
+- The public landing page and trip brief are available without signing in; generating a trip requires an active Google sign-in session. The trip API routes return `401` without an active session.
 
 ### API endpoints
 
