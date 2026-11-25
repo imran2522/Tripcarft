@@ -2,13 +2,15 @@ import { google } from "@ai-sdk/google";
 import { embed, embedMany } from "ai";
 import "server-only";
 
+import { isRateLimitError } from "@/lib/ai/errors";
+
 export function getEmbeddingConfig(): {
   model: string;
   dimensions: number;
 } {
   if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
     throw new Error(
-      "GOOGLE_GENERATIVE_AI_API_KEY is missing. Set it before seeding so guide chunks can be embedded.",
+      "GOOGLE_GENERATIVE_AI_API_KEY is missing. Set it before generating guide embeddings.",
     );
   }
 
@@ -62,6 +64,10 @@ async function requestEmbeddings<T>(request: () => Promise<T>): Promise<T> {
   try {
     return await request();
   } catch (error) {
+    if (isRateLimitError(error)) {
+      throw error;
+    }
+
     const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     const message =
       error instanceof Error

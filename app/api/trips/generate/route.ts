@@ -15,7 +15,12 @@ import {
   getItineraryDays,
   getTrips,
 } from "@/lib/mongodb";
+import {
+  citySlug,
+  getOrCreateDestinationGuide,
+} from "@/lib/rag/destinationGuides";
 import { generateItinerary } from "@/lib/rag/generateItinerary";
+import type { GuideContextChunk } from "@/lib/rag/retrieve";
 
 // Retrieval and model generation both run inside this request.
 export const maxDuration = 60;
@@ -26,7 +31,17 @@ const dateSchema = z
 
 const tripBriefSchema = z
   .strictObject({
-    cities: z.array(z.string().trim().min(1)).min(1).max(20),
+    cities: z
+      .array(
+        z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          .refine((city) => citySlug(city).length > 0),
+      )
+      .min(1)
+      .max(20),
     startDate: dateSchema,
     endDate: dateSchema,
     interests: z.array(z.string().trim().min(1)).max(20),
@@ -61,14 +76,6 @@ const tripBriefSchema = z
 const requestSchema = z.strictObject({
   brief: tripBriefSchema,
 });
-
-function citySlug(city: string): string {
-  return city
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
 
 export async function POST(request: Request): Promise<Response> {
   const sessionUser = (await auth())?.user;
@@ -175,7 +182,10 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const citySlugs = [...new Set(brief.cities.map(citySlug))];
+    const citiesBySlug = new Map(
+      brief.cities.map((city) => [citySlug(city), city]),
+    );
+    const citySlugs = [...citiesBySlug.keys()];
     const destinations = await (
       await getDestinations()
     )
@@ -185,20 +195,17 @@ export async function POST(request: Request): Promise<Response> {
     const destinationIds = new Map(
       destinations.map(({ _id, slug }) => [slug, _id]),
     );
-    const unmatchedCities = brief.cities.filter(
-      (city) => !destinationIds.has(citySlug(city)),
+    const unmatchedCities = [...citiesBySlug].filter(
+      ([slug]) => !destinationIds.has(slug),
     );
-    if (unmatchedCities.length > 0) {
-      return Response.json(
-        {
-          error: "One or more cities do not have destination guide content.",
-          cities: unmatchedCities,
-        },
-        { status: 422 },
-      );
+    const additionalGuideChunks: GuideContextChunk[] = [];
+    for (const [slug, city] of unmatchedCities) {
+      const guide = await getOrCreateDestinationGuide(city);
+      destinationIds.set(slug, guide.destination._id);
+      additionalGuideChunks.push(...guide.chunks);
     }
 
-    const days = await generateItinerary(brief);
+    const days = await generateItinerary(brief, additionalGuideChunks);
     const dayDestinationIds = days.map(({ city }) => {
       const destinationId = destinationIds.get(citySlug(city));
       if (!destinationId) {

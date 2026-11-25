@@ -1,6 +1,25 @@
 import TripPlannerForm from "@/components/TripPlannerForm";
+import { auth } from "@/auth";
 import Link from "next/link";
+import { Suspense } from "react";
 import styles from "./page.module.css";
+
+async function AccountNav() {
+  const user = (await auth())?.user;
+
+  return user ? (
+    <>
+      <span>{user.name ?? user.email ?? "Account"}</span>
+      <Link className={styles.signIn} href="/api/auth/signout">
+        Sign out <span aria-hidden="true">↗</span>
+      </Link>
+    </>
+  ) : (
+    <Link className={styles.signIn} href="/api/auth/signin">
+      Sign in <span aria-hidden="true">↗</span>
+    </Link>
+  );
+}
 
 export default function Home() {
   return (
@@ -19,9 +38,9 @@ export default function Home() {
           <a href="#how-it-works">How it works</a>
           <a href="#plan">Your trip</a>
           <Link href="/trips">My trips</Link>
-          <Link className={styles.signIn} href="/api/auth/signin">
-            Sign in <span aria-hidden="true">↗</span>
-          </Link>
+          <Suspense fallback={<span className={styles.signIn} aria-hidden="true">Account</span>}>
+            <AccountNav />
+          </Suspense>
         </nav>
       </header>
 

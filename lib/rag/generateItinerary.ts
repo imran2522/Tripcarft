@@ -4,7 +4,10 @@ import "server-only";
 
 import { chatModel } from "@/lib/ai/provider";
 import type { ItineraryDayItem, Trip } from "@/lib/db/types";
-import { retrieveGuideChunks } from "@/lib/rag/retrieve";
+import {
+  retrieveGuideChunks,
+  type GuideContextChunk,
+} from "@/lib/rag/retrieve";
 import { itineraryDayItemSchema } from "@/lib/rag/schemas";
 
 export interface GeneratedItineraryDay {
@@ -16,9 +19,18 @@ export interface GeneratedItineraryDay {
 
 export async function generateItinerary(
   brief: Trip["brief"],
+  additionalGuideChunks: GuideContextChunk[] = [],
 ): Promise<GeneratedItineraryDay[]> {
   const { notes, ...retrievalBrief } = brief;
-  const chunks = await retrieveGuideChunks(retrievalBrief);
+  const retrievedChunks = await retrieveGuideChunks(retrievalBrief);
+  const chunks = [
+    ...new Map(
+      [...retrievedChunks, ...additionalGuideChunks].map((chunk) => [
+        chunk.id,
+        chunk,
+      ]),
+    ).values(),
+  ];
   const retrievedChunkIds = new Set(chunks.map(({ id }) => id));
   // End dates are travel dates too, so both endpoints are included in the plan.
   const dayCount =

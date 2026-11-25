@@ -178,6 +178,8 @@ npm run seed
 
 The script upserts five destinations (Istanbul, Cappadocia, Lisbon, Kyoto, and Cairo), each with six guide-text chunks, plus an example Istanbul trip and its three itinerary days. It is safe to rerun. To generate embeddings, configure the embedding variables above before running it.
 
+Cities without an existing guide are generated on demand with `GEMINI_CHAT_MODEL`, embedded with the configured Google embedding model, and saved in MongoDB for reuse. This does not require changing or rerunning the seed data. On-demand guide generation uses Gemini even when `AI_CHAT_PROVIDER=groq`; it requires the Google chat and embedding settings. Generated guides are AI-created rather than live-verified, so check current venue details, prices, and schedules before traveling.
+
 **Destructive:** `npm run seed -- --reset` drops the `destinations`, `trips`, and `itineraryDays` collections before recreating them. This deletes all data in those collections.
 
 ### Create the Atlas Vector Search index

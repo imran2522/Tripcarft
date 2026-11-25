@@ -16,7 +16,7 @@ interface RetrievalCandidate {
   guideChunks: GuideChunk[];
 }
 
-export interface RetrievedGuideChunk {
+export interface GuideContextChunk {
   id: string;
   topic: string;
   text: string;
@@ -25,6 +25,9 @@ export interface RetrievedGuideChunk {
     name: string;
     country: string;
   };
+}
+
+export interface RetrievedGuideChunk extends GuideContextChunk {
   score: number;
 }
 
